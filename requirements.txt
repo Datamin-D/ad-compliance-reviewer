@@ -1,0 +1,6 @@
+google-genai>=1.0.0
+langgraph>=1.0.0
+chromadb>=0.5.0
+numpy>=1.26
+python-dotenv>=1.0.0
+pytest>=8.0.0

@@ -1,0 +1,25 @@
+{"id": "E-01", "ad_text": "대한민국 No.1 에어컨, 지금 만나보세요.", "expected": "REVIEW", "expected_rules": ["R-01"], "note": "최상급 표현에 조사기관·시점 근거 누락"}
+{"id": "E-02", "ad_text": "전기료 50% 절감! 새로운 인버터 에어컨.", "expected": "REVIEW", "expected_rules": ["R-04"], "note": "정량 효능에 시험 조건·비교 대상 누락"}
+{"id": "E-03", "ad_text": "자사 2023년형 모델 대비 최대 30% 전력 절감 (KTL 시험 기준, 냉방 8시간 연속 운전 조건).", "expected": "PASS", "expected_rules": ["R-04", "R-06"], "note": "비교 대상·시험 조건·최대치 조건 모두 표시"}
+{"id": "E-04", "ad_text": "경쟁사 제품보다 2배 빠른 냉방 속도.", "expected": "BLOCK", "expected_rules": ["R-05", "R-13"], "note": "비교 대상 불명확 + 동일 조건 미표시 비교광고"}
+{"id": "E-05", "ad_text": "여름 준비, 우리 집 거실을 시원하게. 신제품 스탠드 에어컨 출시.", "expected": "PASS", "expected_rules": [], "note": "검증이 필요한 주장 없음"}
+{"id": "E-06", "ad_text": "전 품목 30% 할인!", "expected": "REVIEW", "expected_rules": ["R-08"], "note": "기준가격·할인 기간 미표시"}
+{"id": "E-07", "ad_text": "전 품목 30% 할인 (정상가 기준, 2026년 3월 1일 ~ 3월 31일).", "expected": "PASS", "expected_rules": ["R-08"], "note": "기준가격과 기간 표시 완료"}
+{"id": "E-08", "ad_text": "업계 최저가 보장! 어디서도 이 가격은 없습니다.", "expected": "REVIEW", "expected_rules": ["R-09"], "note": "비교 범위·시점 미표시"}
+{"id": "E-09", "ad_text": "가입만 하면 공기청정기 무료 증정!", "expected": "REVIEW", "expected_rules": ["R-11"], "note": "'무료'에 약정 조건이 붙어 있으나 조건 미표시"}
+{"id": "E-10", "ad_text": "선착순 한정 특가! 서두르세요.", "expected": "REVIEW", "expected_rules": ["R-12"], "note": "실제 수량·종료 시점 미표시"}
+{"id": "E-11", "ad_text": "A사 정수기는 이제 그만. 고장만 잘 나는 제품과는 다릅니다.", "expected": "BLOCK", "expected_rules": ["R-14", "R-15"], "note": "경쟁사 실명 노출 + 비방 표현"}
+{"id": "E-12", "ad_text": "본 제품은 아토피와 비염을 치료해 줍니다.", "expected": "BLOCK", "expected_rules": ["R-16"], "note": "일반 공산품의 의학적 치료 효능 표현"}
+{"id": "E-13", "ad_text": "유해 세균 99.9% 살균 (한국화학융합시험연구원, 대장균·황색포도상구균 대상, 밀폐 챔버 2시간 기준).", "expected": "PASS", "expected_rules": ["R-17"], "note": "시험기관·균종·조건 표시 완료"}
+{"id": "E-14", "ad_text": "99.9% 살균으로 우리 아이 안심.", "expected": "REVIEW", "expected_rules": ["R-17"], "note": "시험기관·균종·조건 누락"}
+{"id": "E-15", "ad_text": "100% 무해한 소재, 부작용 걱정 없습니다.", "expected": "BLOCK", "expected_rules": ["R-18"], "note": "안전성 단정 표현"}
+{"id": "E-16", "ad_text": "구매 고객 전원 사은품 증정 이벤트.", "expected": "REVIEW", "expected_rules": ["R-20", "R-21"], "note": "응모 자격·기간·제세공과금 조건 미표시"}
+{"id": "E-17", "ad_text": "응모하면 누구나 100% 당첨! 해외여행 상품권을 드립니다.", "expected": "BLOCK", "expected_rules": ["R-22"], "note": "전원 지급이 아닌 추첨 경품에 100% 당첨 표현"}
+{"id": "E-18", "ad_text": "실제 사용 고객 김OO 님의 후기: '한 달 만에 체감이 달라졌어요.'", "expected": "REVIEW", "expected_rules": ["R-24"], "note": "개인적 경험임을 명시하지 않음"}
+{"id": "E-19", "ad_text": "세계 최초 AI 자동 청정 기능 탑재.", "expected": "REVIEW", "expected_rules": ["R-03"], "note": "'세계 최초' 기준 미표시"}
+{"id": "E-20", "ad_text": "월 29,900원으로 시작하세요. (36개월 약정, 설치비 별도 5만원, 부가세 포함)", "expected": "PASS", "expected_rules": ["R-10"], "note": "추가 비용과 약정 조건 표시 완료"}
+{"id": "E-21", "ad_text": "월 29,900원! 이 가격에 프리미엄 정수기를 쓰세요.", "expected": "REVIEW", "expected_rules": ["R-10"], "note": "약정·설치비 등 추가 비용 미표시"}
+{"id": "E-22", "ad_text": "1위 브랜드가 만든 프리미엄 라인업. (2025년 한국갤럽 브랜드 선호도 조사, 국내 정수기 부문)", "expected": "PASS", "expected_rules": ["R-01", "R-02"], "note": "조사기관·시점·범위 표시 완료"}
+{"id": "E-23", "ad_text": "지금 신청하시면 다음 달 출시될 스마트 진단 기능도 함께 이용하실 수 있습니다.", "expected": "REVIEW", "expected_rules": ["R-28"], "note": "출시 예정 기능임을 명확히 표시하지 않음"}
+{"id": "E-24", "ad_text": "판매량 1위 (자사 집계 기준).", "expected": "BLOCK", "expected_rules": ["R-02"], "note": "공인 조사기관이 아닌 자사 집계를 순위 근거로 사용"}
+{"id": "E-25", "ad_text": "제품 사진은 실제와 다를 수 있습니다. 자세한 사양은 제품 상세 페이지를 확인해 주세요.", "expected": "PASS", "expected_rules": ["R-27"], "note": "이미지 연출 고지 포함, 검증 대상 주장 없음"}

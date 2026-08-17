@@ -1,0 +1,15 @@
+# 비밀 정보
+.env
+
+# 로컬 벡터 인덱스 (build_index.py로 언제든 재생성 가능)
+.chroma/
+
+# 평가 산출물
+results.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
