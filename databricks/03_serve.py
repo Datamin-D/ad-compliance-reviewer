@@ -131,8 +131,10 @@ else:
 # COMMAND ----------
 
 import json
+from databricks.sdk import WorkspaceClient
+w = WorkspaceClient()   # 세션이 재시작돼도 이 셀만 단독으로 실행되게
 r = w.serving_endpoints.query(
-    name=SERVING_ENDPOINT,
+    name="ad-reviewer",
     dataframe_records=[{"ad_text": "전기료 50% 절감! 새로운 인버터 에어컨.", "country": "KR"}],
 )
 out = json.loads(r.predictions[0])
