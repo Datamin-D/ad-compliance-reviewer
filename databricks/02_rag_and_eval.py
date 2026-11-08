@@ -105,7 +105,8 @@ with mlflow.start_run(run_name=f"rag-eval-topk{TOP_K}"):
             errors.append({"id": row["id"], "error": str(e)[:300]})
             print("❌", row["id"], str(e)[:100])
             continue
-        want = set(row.get("expected_rules") or [])
+        # Spark→pandas는 배열 컬럼을 numpy 배열로 준다. `배열 or []`는 원소 2개 이상이면 에러라서 None만 따로 처리
+        want = set([] if row.get("expected_rules") is None else row["expected_rules"])
         got = set(res.retrieved_rule_ids)
         cases.append({
             "id": row["id"], "expected": row["expected"], "predicted": res.decision.value,
@@ -120,7 +121,7 @@ with mlflow.start_run(run_name=f"rag-eval-topk{TOP_K}"):
     scored = [c for c in cases if c["retrieval_hit"] is not None]
 
     mlflow.log_metrics({
-        "accuracy": sum(c["correct"] for c in cases) / len(cases),
+        "accuracy": sum(c["correct"] for c in cases) / max(len(cases), 1),
         "risky_recall": tp / (tp + fn) if tp + fn else 0.0,        # ★ 헤드라인
         "risky_precision": tp / (tp + fp) if tp + fp else 0.0,
         "false_negatives": fn,                                      # 놓친 위험 광고 수
