@@ -62,24 +62,32 @@ print("✅ 금고 저장:", f"{SECRET_SCOPE}/{SECRET_KEY}")
 # MAGIC - `python_model`에 **파일 경로**를 준다(models-from-code) → 그 파일이 곧 모델.
 # MAGIC - `code_paths`로 `src/`(프롬프트·grounding 체크)를 같이 싣는다.
 # MAGIC - `resources`에 검색 인덱스를 적어두면 서빙 서버가 **검색 권한을 자동으로** 받는다.
-# MAGIC - 기록 전에 예시 문장으로 한 번 실제 심사를 돌려본다(1~2분) → 여기서 에러면 배포해도 에러.
+# MAGIC - `signature`(입력: ad_text·country / 출력: JSON 문자열)를 직접 적는다 → UC 등록 필수 조건. 코드 검증은 02의 25건 평가가 이미 했다.
 
 # COMMAND ----------
 
 import mlflow
-import pandas as pd
 from importlib.metadata import version
+from mlflow.models import ModelSignature
 from mlflow.models.resources import DatabricksServingEndpoint, DatabricksVectorSearchIndex
+from mlflow.types import ColSpec, Schema
 
 mlflow.set_registry_uri("databricks-uc")
 mlflow.set_experiment(MLFLOW_EXPERIMENT)
+
+# 입출력 형식표(signature) — UC는 이게 없으면 등록을 거부한다.
+# 직접 적어두면 MLflow가 '예시로 시험 심사를 돌려 추측'하지 않는다(그 시험이 노트북 환경 탓에 깨졌었음).
+signature = ModelSignature(
+    inputs=Schema([ColSpec("string", "ad_text"), ColSpec("string", "country")]),
+    outputs=Schema([ColSpec("string")]),   # 심사 결과 JSON 문자열
+)
 
 with mlflow.start_run(run_name="ad-reviewer-model"):
     info = mlflow.pyfunc.log_model(
         name="model",
         python_model=f"{REPO_PATH}/databricks/serving_model.py",
         code_paths=[f"{REPO_PATH}/src"],
-        input_example=pd.DataFrame([{"ad_text": "대한민국 No.1 에어컨, 지금 만나보세요.", "country": "KR"}]),
+        signature=signature,
         resources=[DatabricksVectorSearchIndex(index_name=INDEX_NAME),
                    DatabricksServingEndpoint(endpoint_name=EMBED_ENDPOINT)],
         pip_requirements=[f"{p}=={version(p)}" for p in ("mlflow", "databricks-vectorsearch", "google-genai")],
