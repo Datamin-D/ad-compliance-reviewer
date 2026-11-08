@@ -16,7 +16,7 @@
 
 # ---- CONFIG (본인 워크스페이스 값으로) ------------------------------------
 CATALOG   = "workspace"             # Free Edition 기본 카탈로그(내 워크스페이스에 있는 이름으로)
-SCHEMA    = "default"
+SCHEMA    = "ad_compliance"         # 실제로 만든 스키마 이름
 VOLUME    = "raw"                   # jsonl 업로드용 UC Volume
 VS_ENDPOINT = "adcompliance-vs"     # Vector Search 엔드포인트 이름
 EMBED_ENDPOINT = "databricks-gte-large-en"   # FM API 관리형 임베딩(무설정). Gemini 임베딩 게이트웨이로 바꿔도 됨
@@ -116,16 +116,29 @@ vsc.wait_for_endpoint(name=VS_ENDPOINT, verbose=True)   # 준비될 때까지 �
 
 # COMMAND ----------
 
-index = vsc.create_delta_sync_index(
-    endpoint_name=VS_ENDPOINT,
-    index_name=INDEX_NAME,
-    source_table_name=POLICIES_TABLE,
-    pipeline_type="TRIGGERED",          # 수동 트리거 동기화(비용↓). 실시간이면 "CONTINUOUS"
-    primary_key="rule_id",
-    embedding_source_column="document", # 이 컬럼을 임베딩
-    embedding_model_endpoint_name=EMBED_ENDPOINT,
-)
+# 이미 있으면 새로 만들지 않고 가져온다 (셀을 다시 돌려도 안전하게)
+# — create_delta_sync_index는 같은 이름이 있으면 에러를 내고, 그러면 index 변수가 안 만들어져서
+#   아래 스모크 테스트 셀까지 NameError로 연쇄 실패한다. 그래서 except에서 get_index로 받아둔다.
+try:
+    index = vsc.create_delta_sync_index(
+        endpoint_name=VS_ENDPOINT,
+        index_name=INDEX_NAME,
+        source_table_name=POLICIES_TABLE,
+        pipeline_type="TRIGGERED",          # 수동 트리거 동기화(비용↓). 실시간이면 "CONTINUOUS"
+        primary_key="rule_id",
+        embedding_source_column="document", # 이 컬럼을 임베딩
+        embedding_model_endpoint_name=EMBED_ENDPOINT,
+    )
+    print("인덱스 생성 시작:", INDEX_NAME)
+except Exception as e:
+    print("생성 스킵(이미 존재?):", e)
+    index = vsc.get_index(endpoint_name=VS_ENDPOINT, index_name=INDEX_NAME)
+
 index.wait_until_ready(verbose=True)
+print("인덱스 준비 완료:", INDEX_NAME)
+
+# 규정 테이블을 고친 뒤에는 아래 한 줄로 '바뀐 행만' 다시 임베딩된다(TRIGGERED라 수동 호출).
+# index.sync()
 
 # COMMAND ----------
 

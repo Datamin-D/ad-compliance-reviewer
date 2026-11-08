@@ -15,16 +15,6 @@
 
 # COMMAND ----------
 
-# ---- CONFIG (01과 같은 카탈로그/스키마로) -----------------------------------
-CATALOG, SCHEMA = "workspace", "default"     # ← 01에서 쓴 이름과 똑같이
-VS_ENDPOINT = "adcompliance-vs"
-INDEX_NAME  = f"{CATALOG}.{SCHEMA}.policies_index"
-EVAL_TABLE  = f"{CATALOG}.{SCHEMA}.eval_set"
-GEMINI_MODEL = "gemini-3.6-flash"            # 지금 내 키로 쓸 수 있는 모델명
-MLFLOW_EXPERIMENT = "/Users/min91155@gmail.com/adcompliance-rag"
-TOP_K = 5
-# ---------------------------------------------------------------------------
-
 # REPO_PATH 자동 인식: 이 노트북은 <repo>/databricks/ 안에 있으므로 상위 폴더가 repo 루트.
 # (Git folder로 가져왔다면 여기서 src/ 를 찾는다. 자동 인식이 안 되면 아래 줄을 직접 채운다.)
 import os, sys
@@ -32,115 +22,57 @@ try:
     _nb = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()  # noqa: F821
     REPO_PATH = "/Workspace" + os.path.dirname(os.path.dirname(_nb))
 except Exception:
-    REPO_PATH = "/Workspace/Users/min91155@gmail.com/RAG"   # ← 수동 fallback (폴더 우클릭 → Copy path)
-if REPO_PATH not in sys.path:
-    sys.path.append(REPO_PATH)
+    REPO_PATH = "/Workspace/Users/min91155@gmail.com/ad-compliance-reviewer"  # ← 수동 fallback (폴더 우클릭 → Copy path)
+for p in (REPO_PATH, f"{REPO_PATH}/databricks"):
+    if p not in sys.path:
+        sys.path.append(p)
 print("REPO_PATH =", REPO_PATH)
 
-# ★ 도메인 로직 재사용 (chromadb·genai 의존 없는 leaf 모듈이라 그냥 import된다)
-from src.prompts import CLAIM_PROMPT, CLAIM_SCHEMA, JUDGE_PROMPT, JUDGE_SCHEMA, COUNTRY_CONTEXT
-from src.schema import parse_review_payload
+MLFLOW_EXPERIMENT = "/Users/min91155@gmail.com/adcompliance-rag"
+# 나머지 CONFIG(카탈로그·스키마·인덱스·모델명·TOP_K)는 serving_model.py 맨 위 한 곳에만 있다.
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 1) Gemini 키 입력
-# MAGIC 이 셀을 실행하면 **노트북 맨 위에 입력창(`gemini_api_key`)** 이 생긴다. 거기에 키를 붙여넣고 셀을 다시 실행.
+# MAGIC ## 1-a) 키 입력창 만들기 — **이 셀부터 실행**
+# MAGIC 실행하면 **노트북 맨 위(제목 바로 아래)** 에 `Gemini API Key` 입력창이 생긴다.
+# MAGIC 거기에 키를 붙여넣은 뒤 **다음 셀(1-b)** 로 넘어갈 것. 이 셀은 에러 없이 끝난다.
 # MAGIC (코드에 키를 안 써서 GitHub에 안 올라간다. 키 발급: https://aistudio.google.com/apikey )
 
 # COMMAND ----------
 
 dbutils.widgets.text("gemini_api_key", "", "Gemini API Key (여기에 붙여넣기)")   # noqa: F821
-GEMINI_API_KEY = dbutils.widgets.get("gemini_api_key")                          # noqa: F821
-assert GEMINI_API_KEY, "↑ 맨 위 입력창에 Gemini 키를 붙여넣고 이 셀을 다시 실행하세요."
-
-import json, time
-from google import genai
-from google.genai import types
-
-_gemini = genai.Client(api_key=GEMINI_API_KEY)
-
-def generate_json(prompt, schema=None, system_instruction=None, temperature=0.0):
-    """Gemini 직접 호출. response_schema로 JSON을 '강제'(로컬 llm.generate_json과 동일 보장) + 짧은 재시도."""
-    for attempt in range(3):
-        try:
-            r = _gemini.models.generate_content(
-                model=GEMINI_MODEL, contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction, temperature=temperature,
-                    response_mime_type="application/json", response_schema=schema))
-            return json.loads((r.text or "").strip() or "{}")
-        except Exception:
-            if attempt == 2:
-                raise
-            time.sleep(1.5 * (attempt + 1))
+print("✅ 입력창을 만들었습니다.")
+print("   → 노트북 맨 위로 스크롤(Ctrl+Home)해서 'Gemini API Key' 칸에 키를 붙여넣으세요.")
+print("   → 붙여넣은 뒤 아래 1-b 셀을 실행하면 됩니다. (입력창이 안 보이면 상단 Widgets 아이콘을 눌러 펼치세요)")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 2) Vector Search 검색기 (로컬 `search_many`와 같은 인터페이스)
+# MAGIC ## 1-b) 키 읽어서 Gemini 연결
+# MAGIC 위 입력창에 키를 넣은 **뒤에** 실행. 비어 있으면 여기서 멈춘다(정상 — 키를 넣고 다시 실행).
 
 # COMMAND ----------
 
-from databricks.vector_search.client import VectorSearchClient
-_index = VectorSearchClient(disable_notice=True).get_index(VS_ENDPOINT, INDEX_NAME)
-
-def search_many(queries, k=TOP_K, country=None):
-    """claim 여러 개 검색 → 중복 규정 병합(최고 점수). 반환: (rule_id, category, title, text, severity, score) 리스트."""
-    best = {}
-    for q in queries:
-        res = _index.similarity_search(
-            query_text=q,
-            columns=["rule_id", "category", "title", "text", "severity"],
-            num_results=k,
-            filters={"country": country} if country else None,
-        )
-        for row in res["result"]["data_array"]:
-            rid, cat, title, text, sev = row[0], row[1], row[2], row[3], row[4]
-            score = row[-1]                       # 마지막 컬럼 = 유사도 점수
-            if rid not in best or score > best[rid][-1]:
-                best[rid] = (rid, cat, title, text, sev, score)
-    return sorted(best.values(), key=lambda r: r[-1], reverse=True)
+os.environ["GEMINI_API_KEY"] = dbutils.widgets.get("gemini_api_key")           # noqa: F821
+assert os.environ["GEMINI_API_KEY"], "↑ 노트북 맨 위 'Gemini API Key' 입력창에 키를 붙여넣고 이 셀을 다시 실행하세요."
+print("✅ 키 확인")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 3) `review()` 재구성 + MLflow Tracing
-# MAGIC 각 단계(@mlflow.trace)가 span으로 남는다 = 모든 판정의 **감사 추적**. 프롬프트·grounding은 `src/` 재사용.
+# MAGIC ## 2~3) `review()` 가져오기 + MLflow Tracing
+# MAGIC 심사 로직(Gemini 호출·Vector Search 검색·판정)은 **`serving_model.py` 한 곳**에 있다.
+# MAGIC 여기서 평가하는 코드 = `03`에서 Model Serving으로 배포하는 코드.
+# MAGIC 각 단계(@mlflow.trace)가 span으로 남는다 = 모든 판정의 **감사 추적**.
 
 # COMMAND ----------
 
 import mlflow
 mlflow.set_experiment(MLFLOW_EXPERIMENT)
 
-@mlflow.trace(span_type="LLM")
-def extract_claims(ad_text):
-    payload = generate_json(CLAIM_PROMPT.format(ad_text=ad_text), CLAIM_SCHEMA,
-                            system_instruction="당신은 광고 심의 실무자입니다. 검증이 필요한 주장만 정확히 골라냅니다.")
-    return list(dict.fromkeys(c.strip() for c in payload.get("claims", []) if c.strip()))
-
-@mlflow.trace(span_type="RETRIEVER")
-def retrieve(claims, country, k=TOP_K):
-    return search_many(claims, k=k, country=country)
-
-@mlflow.trace(span_type="LLM")
-def judge(ad_text, claims, hits, country):
-    rules = "\n".join(f"- {h[0]} | {h[1]} | {h[2]} (심각도: {h[4]})\n    {h[3]}" for h in hits)
-    payload = generate_json(
-        JUDGE_PROMPT.format(country=country, country_context=COUNTRY_CONTEXT.get(country, ""),
-                            ad_text=ad_text, claims="\n".join(f"- {c}" for c in claims),
-                            rules=rules or "(검색된 규정이 없습니다.)"),
-        JUDGE_SCHEMA,
-        system_instruction="당신은 광고 심의 법무 검토자입니다. 주어진 규정만 근거로 판단합니다.")
-    # ★ 로컬과 동일한 grounding 체크 재사용: 검색 안 된 rule_id는 코드에서 폐기
-    return parse_review_payload(payload, ad_text, claims, [h[0] for h in hits])
-
-@mlflow.trace(span_type="CHAIN")
-def review(ad_text, country="KR", k=TOP_K):
-    claims = extract_claims(ad_text)
-    if not claims:
-        return parse_review_payload({"decision": "PASS", "risk_score": 0.0, "issues": []}, ad_text, [], [])
-    return judge(ad_text, claims, retrieve(claims, country, k), country)
+from serving_model import review, CATALOG, SCHEMA, TOP_K, GEMINI_MODEL, EMBED_ENDPOINT
+EVAL_TABLE = f"{CATALOG}.{SCHEMA}.eval_set"
 
 # 스모크 — EU 판정이 찍히면 검색+판정이 붙은 것
 r = review("100% eco-friendly air conditioner, zero emissions!", country="EU")
@@ -162,12 +94,17 @@ RISKY = {"REVIEW", "BLOCK"}
 
 with mlflow.start_run(run_name=f"rag-eval-topk{TOP_K}"):
     mlflow.log_param("top_k", TOP_K)
-    mlflow.log_param("embed", "databricks-gte-large-en")
+    mlflow.log_param("embed", EMBED_ENDPOINT)
     mlflow.log_param("judge", GEMINI_MODEL)
 
-    cases = []
+    cases, errors = [], []
     for row in eval_rows:
-        res = review(row["ad_text"], country=row.get("country", "KR"), k=TOP_K)
+        try:
+            res = review(row["ad_text"], country=row.get("country", "KR"), k=TOP_K)
+        except Exception as e:   # 한 건 실패(예: Gemini 503)로 25건 전체가 멈추지 않게. 실패 건은 따로 기록
+            errors.append({"id": row["id"], "error": str(e)[:300]})
+            print("❌", row["id"], str(e)[:100])
+            continue
         want = set(row.get("expected_rules") or [])
         got = set(res.retrieved_rule_ids)
         cases.append({
@@ -188,9 +125,13 @@ with mlflow.start_run(run_name=f"rag-eval-topk{TOP_K}"):
         "risky_precision": tp / (tp + fp) if tp + fp else 0.0,
         "false_negatives": fn,                                      # 놓친 위험 광고 수
         "retrieval_recall_at_k": sum(bool(c["retrieval_hit"]) for c in scored) / len(scored) if scored else 0.0,
+        "n_scored": len(cases),                                     # 점수에 들어간 건수
+        "n_errors": len(errors),                                    # 실패해서 빠진 건수 (0이어야 깔끔)
     })
     mlflow.log_table(pd.DataFrame(cases), "cases.json")             # per-case 상세(오답 분석)
-    print("완료. Experiments → adcompliance-rag 에서 risky_recall / recall@k / Traces 확인.")
+    if errors:
+        mlflow.log_table(pd.DataFrame(errors), "errors.json")
+    print(f"완료: {len(cases)}건 채점, {len(errors)}건 실패. Experiments → adcompliance-rag → Evaluation runs 에서 확인.")
     print("실험: CONFIG의 TOP_K를 3으로 바꿔 이 셀만 다시 돌리면 run이 하나 더 → 두 run을 Compare.")
 
 # COMMAND ----------
