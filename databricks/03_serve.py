@@ -119,7 +119,7 @@ if SERVING_ENDPOINT in [e.name for e in w.serving_endpoints.list()]:
     w.serving_endpoints.update_config(name=SERVING_ENDPOINT, served_entities=[entity])
     print("기존 엔드포인트를 새 버전으로 교체 시작:", SERVING_ENDPOINT, "v" + VERSION)
 else:
-    w.serving_endpoints.create(name=SERVING_ENDPOINT, config=EndpointCoreConfigInput(served_entities=[entity]))
+    w.serving_endpoints.create(name=SERVING_ENDPOINT, config=EndpointCoreConfigInput(name=SERVING_ENDPOINT, served_entities=[entity]))
     print("엔드포인트 생성 시작:", SERVING_ENDPOINT, "→ Serving 화면에서 Ready 기다리기")
 
 # COMMAND ----------
